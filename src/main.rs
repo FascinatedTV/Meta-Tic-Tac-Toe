@@ -15,7 +15,7 @@ fn main() {
 
     for _ in 0..10 {
         // let player1 = Box::new(RandomPlayer::new());
-        let player1 = Box::new(MonteCarlo::new(1000, false));
+        let player1 = Box::new(MonteCarlo::new(100, false));
         let player2 = Box::new(MonteCarlo::new(5000, false));
         let mut game = Game::new(player1, player2);
         match game.play(){
@@ -154,12 +154,12 @@ impl Player for MonteCarlo {
             }
         }
 
-        self.tree_head = GameTreeKnot {
-            children: vec![],
-            move_: None,
-            score: 0.,
-            visit_count: 0.,
-        };
+        // self.tree_head = GameTreeKnot {
+        //     children: vec![],
+        //     move_: None,
+        //     score: 0.,
+        //     visit_count: 0.,
+        // };
 
         for _ in 0..self.iterations {
             self.tree_head.select_and_backtrack(meta_board);
@@ -407,6 +407,9 @@ impl Game {
                     println!("Game over!");
                     return player_marker
                 }
+            } else {
+                println!("Invalid move!");
+                continue;
             }
 
             self.current_player *= -1;

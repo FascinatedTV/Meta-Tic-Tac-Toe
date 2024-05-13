@@ -11,6 +11,7 @@ const WINNING_POSITIONS: [u16; 8] = [
     0b100_010_001, 0b001_010_100, // Diagonalen
 ];
 
+
 #[derive(Clone, Copy, PartialEq)]
 pub enum PlayerMarker {
     X,
@@ -97,6 +98,7 @@ impl BitBoard {
             o: 0,
         }
     }
+
 
     fn get(&self, index: usize) -> PlayerMarker {
         let mask = 1 << index;
@@ -192,6 +194,13 @@ impl MetaBoard {
         }
 
         let spec_index = index[0];
+
+        if self.board.get(spec_index) != PlayerMarker::Empty {
+            return Err(InvalidMoveError {
+                message: "Board is already won".to_string(),
+            });
+        }
+
         let sub_board = self.sub_boards.get_mut(spec_index).unwrap();
         match sub_board.set(&index[1..], player) {
             Ok(marker) => {
@@ -453,7 +462,7 @@ impl fmt::Display for Board {
 
 // #############################
 // #                           #
-// #           Game            #
+// #        GameState          #
 // #                           #
 // #############################
 
