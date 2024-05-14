@@ -1,9 +1,9 @@
-use std::{error::Error, fmt, fs, vec};
-
+use std::{array::IntoIter, borrow::Borrow, error::Error, fmt, ops::{Index, Range, RangeBounds}, vec};
 
 pub const BOARD_SIZE: usize = 3;
 pub const BOARD_SIZE_SQUARED: usize = BOARD_SIZE * BOARD_SIZE;
 pub const META_DEPTH: usize = 2;
+pub const META_SIZE: usize = BOARD_SIZE_SQUARED.pow(META_DEPTH as u32);
 pub const DISPLAY_SIZE: usize = Board::calculate_display_size();
 const WINNING_POSITIONS: [u16; 8] = [
     0b111_000_000, 0b000_111_000, 0b000_000_111, // Zeilen
@@ -56,9 +56,10 @@ impl Error for InvalidMoveError {}
 // #                           #
 // #############################
 
-#[derive(Clone, Copy, Debug, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Default)]
 pub struct MetaMove {
     pub absolute_index: [usize; META_DEPTH],
+    index: usize
 }
 
 impl MetaMove {
@@ -68,13 +69,123 @@ impl MetaMove {
         }
         MetaMove {
             absolute_index: absolute_index.try_into().unwrap(),
+            index: 0,
         }
+    }
+
+    pub fn clear(&mut self) {
+        self.index = 0;
+    }
+
+    pub fn new_empty() -> Self {
+        MetaMove {
+            absolute_index: [0; META_DEPTH],
+            index: 0,
+        }
+    }
+
+    pub fn push(&mut self, index: usize) {
+        if self.index >= META_DEPTH {
+            panic!("Index is full");
+        }
+        self.absolute_index[self.index] = index;
+        self.index += 1;
+    }
+
+    pub fn pop(&mut self) -> usize {
+        self.index -= 1;
+        self.absolute_index[self.index]
     }
 
     pub fn shift_left(&self) -> MetaMove {
         let mut new_index = self.absolute_index;
         new_index.rotate_left(1);
         MetaMove::new(new_index.as_slice())    
+    }
+}
+// #############################
+// #                           #
+// #       PossibleMoves       #
+// #                           #
+// #############################
+
+pub struct PossibleMoves {
+    moves: [MetaMove; META_SIZE],
+    index: usize,
+}
+
+impl PossibleMoves {
+    pub fn new() -> PossibleMoves {
+        PossibleMoves {
+            moves : [MetaMove::default(); META_SIZE],
+            index : 0,
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.index
+    }
+
+    pub fn push(&mut self, move_: MetaMove) {
+        self.moves[self.index] = move_;
+        self.index += 1;
+    }
+
+    pub fn clear(&mut self ) {
+        self.index = 0;
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.index == 0
+    }
+}
+
+impl<'a> IntoIterator for &'a PossibleMoves {
+    type Item = &'a MetaMove;
+    type IntoIter = PossibleMovesIterator<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        PossibleMovesIterator {
+            possible_moves: &self,
+            current_index: 0,
+        }
+    }
+}
+
+pub struct PossibleMovesIterator<'a> {
+    possible_moves: &'a PossibleMoves,
+    current_index: usize,
+}
+
+impl<'a> Iterator for PossibleMovesIterator<'a> {
+    type Item = &'a MetaMove;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current_index < self.possible_moves.index {
+            let result = &self.possible_moves.moves[self.current_index];
+            self.current_index += 1;
+            Some(result)
+        } else {
+            None
+        }
+    }
+}
+
+impl RangeBounds<usize> for PossibleMoves {
+    fn start_bound(&self) -> std::ops::Bound<&usize> {
+        std::ops::Bound::Included(&0)
+    }
+
+    fn end_bound(&self) -> std::ops::Bound<&usize> {
+        std::ops::Bound::Excluded(&self.index)
+    }
+}
+
+impl Index<usize> for PossibleMoves {
+    type Output = MetaMove;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.moves[index]
     }
 }
 
@@ -137,19 +248,19 @@ impl BitBoard {
         self.o &= mask;
     }
 
-    fn get_empty_positions(&self, _index: &[usize]) -> Vec<Vec<usize>> {
+    fn get_empty_positions(&self, _index: &[usize], possible_moves: &mut PossibleMoves, next_move: &mut MetaMove) {
         if self.get_winner() != PlayerMarker::Empty {
-            return vec![];
+            return;
         }
 
-        let mut empty_positions = vec![];
         for i in 0..BOARD_SIZE_SQUARED {
             let mask = 1 << i;
             if self.x & mask == 0 && self.o & mask == 0 {
-                empty_positions.push(vec![i]);
+                next_move.push(i);
+                possible_moves.push(next_move.clone());
+                next_move.pop();
             }
         }
-        empty_positions
     }
 
     fn get_winner(&self) -> PlayerMarker {
@@ -161,6 +272,10 @@ impl BitBoard {
             }
         }
         PlayerMarker::Empty
+    }
+
+    fn can_set(&self) -> bool {
+        self.get_winner() == PlayerMarker::Empty && (self.x | self.o) != 0b111_111_111
     }
 }
 
@@ -223,21 +338,10 @@ impl MetaBoard {
         self.board.unset(&[spec_index]);
     }
 
-    // fn get_empty_position_for_board(&self, i: usize, index: &[usize]) -> Vec<Vec<usize>> {
-    //     self.sub_boards
-    //         .get(i)
-    //         .unwrap()
-    //         .get_empty_positions(index)
-    //         .into_iter()
-    //         .map(||)
-    // }
-
-    fn get_empty_positions(&self, index: &[usize]) -> Vec<Vec<usize>> {
+    fn get_empty_positions(&self, index: &[usize], possible_moves: &mut PossibleMoves, next_move: &mut MetaMove) {
         if self.get_winner() != PlayerMarker::Empty {
-            return vec![];
+            return;
         }
-
-        let mut empty_positions = vec![];
 
         if index.is_empty() || self.board.get(index[0]) != PlayerMarker::Empty {
             for (i, sub_board) in self.sub_boards.iter().enumerate() {
@@ -245,27 +349,27 @@ impl MetaBoard {
                     continue;
                 }
     
-                for sub_empty in sub_board.get_empty_positions(&[]) {
-                    let mut new_index = vec![i];
-                    new_index.extend(sub_empty);
-                    empty_positions.push(new_index);
-                }
+                next_move.push(i);
+                sub_board.get_empty_positions(&[], possible_moves, next_move);
+                next_move.pop();
             }
-            return empty_positions;
+            return;
         }
 
         let spec_index = index[0];
         let sub_board = self.sub_boards.get(spec_index).unwrap();
-        for sub_empty in sub_board.get_empty_positions(&index[1..]) {
-            let mut new_index = vec![spec_index];
-            new_index.extend(sub_empty);
-            empty_positions.push(new_index);
-        }
-        empty_positions
+
+        next_move.push(spec_index);
+        sub_board.get_empty_positions(&index[1..], possible_moves, next_move);
+        next_move.pop();
     }
 
     fn get_winner(&self) -> PlayerMarker {
         self.board.get_winner()
+    }
+
+    fn can_set(&self) -> bool {
+        self.get_winner() == PlayerMarker::Empty && self.sub_boards.iter().any(|board| board.can_set())
     }
     
 }
@@ -327,10 +431,10 @@ impl Board{
         }
     }
 
-    fn get_empty_positions(&self, index: &[usize]) -> Vec<Vec<usize>> {
+    fn get_empty_positions(&self, index: &[usize], possible_moves: &mut PossibleMoves, next_move: &mut MetaMove){
         match self {
-            Board::BitBoard(bit_board) => bit_board.get_empty_positions(index),
-            Board::MetaBoard(meta_board) => meta_board.get_empty_positions(index),
+            Board::BitBoard(bit_board) => bit_board.get_empty_positions(index, possible_moves, next_move),
+            Board::MetaBoard(meta_board) => meta_board.get_empty_positions(index, possible_moves, next_move),
         }
     }
 
@@ -353,6 +457,13 @@ impl Board{
         match self {
             Board::BitBoard(bit_board) => bit_board.get_winner(),
             Board::MetaBoard(meta_board) => meta_board.get_winner(),
+        }
+    }
+
+    pub fn can_set(&self) -> bool {
+        match self {
+            Board::BitBoard(bit_board) => bit_board.can_set(),
+            Board::MetaBoard(meta_board) => meta_board.can_set(),
         }
     }
 
@@ -506,7 +617,7 @@ impl GameState {
         }
     }
 
-    pub fn get_possible_moves(&self) -> Vec<MetaMove> {
+    pub fn get_possible_moves(&self, possible_moves: &mut PossibleMoves, next_move: &mut MetaMove) {
         
         let mut next_index: &[usize] = &[];
         let temp;
@@ -515,12 +626,9 @@ impl GameState {
             next_index = temp.absolute_index.as_slice();
         }
         
-
-        return 
-            self.board.get_empty_positions(next_index)
-                .into_iter()
-                .map(|index| MetaMove::new(index.as_slice()))
-                .collect()
+        possible_moves.clear();
+        next_move.clear();
+        self.board.get_empty_positions(next_index, possible_moves, next_move);
     }
 }
 

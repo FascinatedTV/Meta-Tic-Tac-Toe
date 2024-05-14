@@ -1,7 +1,7 @@
 mod game;
 
 use colored::Colorize;
-use game::{GameState, MetaMove, PlayerMarker, DISPLAY_SIZE};
+use game::{GameState, MetaMove, PlayerMarker, PossibleMoves, DISPLAY_SIZE};
 use rand::Rng;
 
 fn main() {
@@ -71,8 +71,13 @@ impl RandomPlayer {
 impl Player for RandomPlayer {
     fn get_move(&mut self, board: GameState) -> MetaMove {
         let mut rng = rand::thread_rng();
-        let moves = board.get_possible_moves();
-        moves[rng.gen_range(0..moves.len())]
+
+        let possible_moves = &mut PossibleMoves::new();
+        let next_move = &mut MetaMove::new_empty();
+
+        board.get_possible_moves(possible_moves, next_move);
+
+        possible_moves[rng.gen_range(0..possible_moves.len())]
     }
 }
 
@@ -81,10 +86,14 @@ struct HumanPlayer;
 impl Player for HumanPlayer {
     fn get_move(&mut self, board: GameState) -> MetaMove {
         let mut input = String::new();
-        loop {
-            let possible_moves = board.get_possible_moves();
+        let possible_moves = &mut PossibleMoves::new();
+        let next_move = &mut MetaMove::new_empty();
 
-            for (i, m) in possible_moves.iter().enumerate() {
+        loop {
+            possible_moves.clear();
+            board.get_possible_moves(possible_moves, next_move);
+
+            for (i, m) in possible_moves.into_iter().enumerate() {
                 println!("{}: {:?}", i, m.absolute_index);
             }
 
@@ -161,8 +170,11 @@ impl Player for MonteCarlo {
         //     visit_count: 0.,
         // };
 
+        let possible_moves = &mut PossibleMoves::new();
+        let next_move = &mut MetaMove::new_empty();
+
         for _ in 0..self.iterations {
-            self.tree_head.select_and_backtrack(meta_board);
+            self.tree_head.select_and_backtrack(meta_board, possible_moves, next_move);
         }
 
         if self.debug {
@@ -256,11 +268,17 @@ impl GameTreeKnot {
             })
     }
 
-    fn select_and_backtrack(&mut self, meta_board: &mut GameState) -> f32 {
+    fn select_and_backtrack(
+        &mut self, 
+        meta_board: &mut GameState, 
+        possible_moves: &mut PossibleMoves, 
+        next_move: &mut MetaMove
+    ) -> f32 
+        {
         self.visit_count += 1.;
 
         if self.children.is_empty() {
-            let score = self.expand_and_playout(meta_board.clone());
+            let score = self.expand_and_playout(meta_board.clone(), possible_moves, next_move);
             self.score += score;
             return score;
         }
@@ -280,15 +298,15 @@ impl GameTreeKnot {
         let move_ = best_node.move_.unwrap();
 
         meta_board.set(move_).unwrap();
-        let result = 1. - best_node.select_and_backtrack(meta_board);
+        let result = 1. - best_node.select_and_backtrack(meta_board, possible_moves, next_move);
         self.score += result;
 
         meta_board.unset(self.move_);
         result
     }
 
-    fn expand_and_playout(&mut self, mut meta_board: GameState) -> f32 {
-        let possible_moves = meta_board.get_possible_moves();
+    fn expand_and_playout(&mut self, mut meta_board: GameState, possible_moves: &mut PossibleMoves, next_move: &mut MetaMove) -> f32 {
+        meta_board.get_possible_moves(possible_moves, next_move);
 
         if possible_moves.is_empty() {
             let player_marker = meta_board.get_winner();
@@ -303,7 +321,7 @@ impl GameTreeKnot {
             };
         }
 
-        for move_ in &possible_moves {
+        for move_ in possible_moves.into_iter() {
             self.children.push(GameTreeKnot {
                 children: vec![],
                 move_: Some(*move_),
@@ -313,17 +331,17 @@ impl GameTreeKnot {
         }
 
         let rand_index = rand::thread_rng().gen_range(0..possible_moves.len());
-        1. - self.children[rand_index].playout(&mut meta_board)
+        1. - self.children[rand_index].playout(&mut meta_board, possible_moves, next_move)
     }
 
-    fn playout(&mut self, meta_board: &mut GameState) -> f32 {
+    fn playout(&mut self, meta_board: &mut GameState, possible_moves: &mut PossibleMoves, next_move: &mut MetaMove) -> f32 {
         let mut rng = rand::thread_rng();
         let current_player = meta_board.current_player;
 
         meta_board.set(self.move_.unwrap()).unwrap();
 
         loop {
-            let possible_moves = meta_board.get_possible_moves();
+            meta_board.get_possible_moves(possible_moves, next_move);
             if possible_moves.is_empty() {
                 break;
             }
@@ -381,8 +399,8 @@ impl Game {
         loop {
             println!("{}", self.board);
 
-            let possible_moves = self.board.get_possible_moves();
-            if possible_moves.is_empty() {
+            // let possible_moves = self.board.get_possible_moves();
+            if !self.board.board.can_set(){
                 println!("{}", "It's a draw!".yellow());
                 return PlayerMarker::Empty;
             }
