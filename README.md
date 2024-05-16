@@ -7,7 +7,6 @@ This Rust program implements a Tic-Tac-Toe game with various player strategies, 
 Ensure you have Rust installed. If not, install it using the following command:
 
 ```sh
-Code kopieren
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 ### Running the Game
