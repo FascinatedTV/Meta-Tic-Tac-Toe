@@ -1,8 +1,9 @@
-use std::{array::IntoIter, borrow::Borrow, error::Error, fmt, ops::{Index, Range, RangeBounds}, vec};
+use std::{error::Error, fmt, ops::{Index, RangeBounds}, vec};
 
+const META_DEPTH: usize = 2;
 pub const BOARD_SIZE: usize = 3;
 pub const BOARD_SIZE_SQUARED: usize = BOARD_SIZE * BOARD_SIZE;
-pub const META_DEPTH: usize = 2;
+// pub const META_DEPTH: usize = 2;
 pub const META_SIZE: usize = BOARD_SIZE_SQUARED.pow(META_DEPTH as u32);
 pub const DISPLAY_SIZE: usize = Board::calculate_display_size();
 const WINNING_POSITIONS: [u16; 8] = [

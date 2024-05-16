@@ -5,4 +5,5 @@ edition = "2021"
 
 [dependencies]
 colored = "2.1.0"
+flagset = "0.4.5"
 rand = "0.8.5"

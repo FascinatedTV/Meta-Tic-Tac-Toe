@@ -230,22 +230,6 @@ impl GameTreeKnot {
         }
     }
 
-    fn get_best_child_uct(&mut self) -> Option<&mut GameTreeKnot> {
-        if self.children.is_empty() {
-            return None;
-        }
-
-        let mut best_child = 0;
-        let mut best_score = self.uct(&self.children[0]);
-        for (i, child) in self.children.iter().enumerate().skip(1) {
-            let score = self.uct(child);
-            if score > best_score {
-                best_score = score;
-                best_child = i;
-            }
-        }
-        Some(&mut self.children[best_child])
-    }
 
     fn get_best_child_score(&mut self) -> Option<&mut GameTreeKnot> {
         if self.children.is_empty() {
