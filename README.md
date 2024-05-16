@@ -45,7 +45,6 @@ const META_DEPTH: usize = 1; // Change this value to increase or decrease the de
 The program will display the results of the 10 matches, showing the number of wins for each player and the number of draws:
 
 ```python
-Code kopieren
 Display_Size: 9
 Player X chose [0, 1]
 Player O chose [1, 2]
