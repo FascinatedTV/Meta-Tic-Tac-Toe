@@ -6,8 +6,6 @@ use rand::Rng;
 
 fn main() {
     println!("Display_Size: {}", DISPLAY_SIZE);
-    // let player2 = Box::new(HumanPlayer);
-    // let player2 = Box::new(RandomPlayer::new());
 
     let mut wins1 = 0;
     let mut wins2 = 0;
@@ -15,7 +13,8 @@ fn main() {
 
     for _ in 0..10 {
         // let player1 = Box::new(RandomPlayer::new());
-        let player1 = Box::new(MonteCarlo::new(100, false));
+        let player1 = Box::new(HumanPlayer::new());
+        // let player1 = Box::new(MonteCarlo::new(100, false));
         let player2 = Box::new(MonteCarlo::new(5000, false));
         let mut game = Game::new(player1, player2);
         match game.play(){
@@ -32,24 +31,6 @@ fn main() {
         draws.to_string().as_str().yellow()
     )
 }
-
-// ##############################
-// # Write to file
-// ##############################
-
-// impl GameState {
-//     fn write_to_file(&self, filename: &str) {
-//         let mut content = String::new();
-//         for row in self.board.iter() {
-//             for cell in row.iter() {
-//                 content.push_str(&cell.to_string());
-//             }
-//             content.push_str("\n");
-//         }
-//         fs::write(filename, content).expect("Unable to write file");
-//     }
-
-// }
 
 // ##############################
 // # Player
@@ -82,6 +63,12 @@ impl Player for RandomPlayer {
 }
 
 struct HumanPlayer;
+
+impl HumanPlayer {
+    fn new() -> Self {
+        HumanPlayer {}
+    }
+}
 
 impl Player for HumanPlayer {
     fn get_move(&mut self, board: GameState) -> MetaMove {
@@ -162,13 +149,6 @@ impl Player for MonteCarlo {
                 println!("No child found for last move");
             }
         }
-
-        // self.tree_head = GameTreeKnot {
-        //     children: vec![],
-        //     move_: None,
-        //     score: 0.,
-        //     visit_count: 0.,
-        // };
 
         let possible_moves = &mut PossibleMoves::new();
         let next_move = &mut MetaMove::new_empty();
@@ -332,13 +312,8 @@ impl GameTreeKnot {
             let index = rng.gen_range(0..possible_moves.len());
             meta_board.set(possible_moves[index]).unwrap();
         }
-
-        // let winner = if let Some(value) = meta_board.get_winner(&[]) {value.to_string()} else {"Draw".to_string()};
-        // println!("End of playout Winner: {} \n{}", winner, meta_board);
-
         
         let player_marker =  meta_board.get_winner();
-        // println!("Playout {}\n{}", player_marker.to_char().to_string(), meta_board);
         let score = if player_marker == PlayerMarker::Empty {
             0.5
         } else {
@@ -348,7 +323,6 @@ impl GameTreeKnot {
                 0.
             }
         };
-        // println!("End of playout {}: {} \n{}", self.player_marker, score, meta_board);
 
         self.visit_count += 1.;
         self.score += score;
@@ -394,10 +368,6 @@ impl Game {
             } else {
                 &mut self.player2
             };
-
-            // possible_moves.iter().for_each(|m| {
-            //     println!("{:?}", m);
-            // });
 
             let chosen_move = current_player.get_move(self.board.clone());
             println!("Player {} chose {:?}", self.board.current_player.to_char(), chosen_move.absolute_index);
