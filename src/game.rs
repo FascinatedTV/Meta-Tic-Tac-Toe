@@ -23,7 +23,7 @@ const WINNING_POSITIONS: [u16; 8] = [
 ];
 
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum PlayerMarker {
     X,
     O,
@@ -296,7 +296,7 @@ impl BitBoard {
 // #                           #
 // #############################
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq)]
 pub struct MetaBoard {
     pub board: BitBoard,
     pub sub_boards: Box<[Board; BOARD_SIZE_SQUARED]>,
@@ -391,7 +391,7 @@ impl MetaBoard {
 // #                           #
 // #############################
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq)]
 pub enum Board {
     BitBoard(BitBoard),
     MetaBoard(MetaBoard),
@@ -588,7 +588,7 @@ impl fmt::Display for Board {
 // #                           #
 // #############################
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct GameState {
     pub board: Board,
     pub current_player: PlayerMarker,

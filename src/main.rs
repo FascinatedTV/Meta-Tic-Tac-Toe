@@ -1,7 +1,5 @@
 mod game;
 
-use std::{sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, thread::{self, JoinHandle}, time::Duration};
-
 use colored::Colorize;
 use game::{GameState, MetaMove, PlayerMarker, PossibleMoves, DISPLAY_SIZE};
 use rand::Rng;
@@ -14,10 +12,10 @@ fn main() {
     let mut draws = 0;
 
     for _ in 0..10 {
-        let player1 = Box::new(RandomPlayer::new());
-        // let player1 = Box::new(HumanPlayer::new());
+        // let player1 = Box::new(RandomPlayer::new());
+        let player1 = Box::new(HumanPlayer::new());
         // let player1 = Box::new(MonteCarlo::new(100, false));
-        let player2 = Box::new(MonteCarloPlayer::new());
+        let player2 = Box::new(MonteCarlo::new(5000, false));
         let mut game = Game::new(player1, player2);
         match game.play(){
             PlayerMarker::X => wins1 += 1,
@@ -107,6 +105,87 @@ struct GameTreeKnot {
     move_: Option<MetaMove>,
     score: f32,
     visit_count: f32,
+}
+
+#[derive(Clone)]
+struct MonteCarlo {
+    tree_head: GameTreeKnot,
+    iterations: i32,
+    debug: bool,
+}
+
+impl MonteCarlo {
+    fn new(iterations: i32, debug: bool) -> Self {
+        MonteCarlo {
+            tree_head: GameTreeKnot {
+                children: vec![],
+                move_: None,
+                score: 0.,
+                visit_count: 0.,
+            },
+            iterations,
+            debug,
+        }
+    }
+}
+
+impl Player for MonteCarlo {
+    fn get_move(&mut self, mut meta_board: GameState) -> MetaMove {
+        let meta_board = &mut meta_board;
+        if meta_board.last_move.is_some() && self.tree_head.move_.is_some() {
+            let last_move = meta_board.last_move.unwrap();
+            let mut check = false;
+            for child in self.tree_head.children.iter() {
+                if child.move_ == Some(last_move) {
+                    self.tree_head = child.to_owned();
+                    check = true;
+                    break;
+                }
+            }
+
+            if !check {
+                // panic!("No child found for last move");
+                println!("{:?}", self.tree_head.children.iter().map(|x| x.move_));
+                println!("No child found for last move");
+            }
+        }
+
+        let possible_moves = &mut PossibleMoves::new();
+        let next_move = &mut MetaMove::new_empty();
+
+        for _ in 0..self.iterations {
+            self.tree_head.select_and_backtrack(meta_board, possible_moves, next_move);
+        }
+
+        if self.debug {
+
+            for child in self.tree_head.children.iter() {
+                println!(
+                    "{:?}: {} {}",
+                    child.move_.unwrap().absolute_index,
+                    child.score,
+                    child.visit_count
+                );
+            }
+
+            println!("Score: {}", self.tree_head.score);
+            println!("Visits: {}", self.tree_head.visit_count);
+            println!(
+                "Score: {}",
+                1. - (self.tree_head.score / self.tree_head.visit_count)
+            );
+            let mut pv = vec![];
+            self.tree_head.pv(&mut pv);
+            for move_ in pv {
+                println!("{:?}", move_.absolute_index);
+            }
+        }
+
+        let best_move = self.tree_head.get_best_child_score().unwrap();
+        self.tree_head = best_move.to_owned();
+
+        self.tree_head.move_.unwrap()
+    }
 }
 
 impl GameTreeKnot {
@@ -251,188 +330,6 @@ impl GameTreeKnot {
     }
 }
 
-#[derive(Clone, Debug)]
-struct MonteCarlo {
-    meta_board : GameState,
-    tree_head: GameTreeKnot,
-    debug: bool,
-}
-
-impl MonteCarlo {
-    fn new(debug: bool) -> Self {
-        MonteCarlo {
-            tree_head: GameTreeKnot {
-                children: vec![],
-                move_: None,
-                score: 0.,
-                visit_count: 0.,
-            },
-            meta_board : GameState::new(),
-            debug,
-        }
-    }
-
-    fn next_move(&mut self, next_move: MetaMove) {
-        if self.tree_head.move_.is_some() {
-            let mut check = false;
-            for child in self.tree_head.children.iter() {
-                if child.move_ == Some(next_move) {
-                    self.tree_head = child.to_owned();
-                    check = true;
-                    break;
-                }
-            }
-
-            if !check {
-                // panic!("No child found for last move");
-                println!("{:?}", self.tree_head.children.iter().map(|x| x.move_));
-                println!("No child found for last move");
-            }
-        }
-    }
-
-    // fn iterate(&mut self, stop_flag : Arc<AtomicBool>) {
-    //     let possible_moves = &mut PossibleMoves::new();
-    //     let next_move = &mut MetaMove::new_empty();
-
-    //     while !stop_flag.load(Ordering::SeqCst){
-    //         self.tree_head.select_and_backtrack(&mut self.meta_board, possible_moves, next_move);
-    //     }
-    // }
-}
-
-struct MonteCarloPlayer {
-    mcts: Arc<Mutex<MonteCarlo>>,
-    flag: Arc<AtomicBool>,
-    thread : Option<JoinHandle<()>>
-}
-
-impl MonteCarloPlayer {
-    fn new() -> Self {
-        MonteCarloPlayer {
-            mcts : Arc::new(Mutex::new(MonteCarlo::new(false))),
-            flag : Arc::new(AtomicBool::new(false)),
-            thread : None
-        }
-    }
-}
-
-impl Drop for MonteCarloPlayer {
-    fn drop(&mut self) {
-        self.flag.store(true, Ordering::SeqCst);
-        if let Some(thread) = self.thread.take() {
-            thread.join().unwrap();
-        }
-    }
-}
-
-impl Player for MonteCarloPlayer {
-    fn get_move(&mut self, game_state: GameState) -> MetaMove {
-        if let Some(last_move) = game_state.last_move {
-            self.mcts
-                .lock()
-                .unwrap()
-                .next_move(last_move);
-        }
-
-        if self.thread.is_none() {
-            let mct_ref = Arc::clone(&self.mcts);
-            let should_stop = Arc::clone(&self.flag);
-            self.thread = Some(
-                thread::spawn(move || {
-                    let possible_moves = &mut PossibleMoves::new();
-                    let next_move = &mut MetaMove::new_empty();
-
-                    while !should_stop.load(Ordering::SeqCst){
-                        mct_ref
-                            .lock()
-                            .unwrap()
-                            .tree_head
-                            .select_and_backtrack(&mut mct_ref.lock().unwrap().meta_board, possible_moves, next_move);
-
-                        thread::sleep(Duration::from_millis(1));
-                    }
-                })
-            )
-        }
-
-        thread::sleep(Duration::from_secs(2));
-
-        let best_move = {
-            let mut mct_guard = self.mcts.lock().unwrap();
-            mct_guard
-                .tree_head
-                .get_best_child_score()
-                .unwrap()
-                .move_
-                .unwrap()
-        };
-    
-        // Update the MCTS with the best move
-        self.mcts.lock().unwrap().next_move(best_move);
-
-        best_move
-    }
-
-    // fn get_move(&self, mut meta_board: GameState) -> MetaMove {
-    //     let meta_board = &mut meta_board;
-    //     let mcts = &mut self.mcts;
-
-    //     if meta_board.last_move.is_some() && mcts.tree_head.move_.is_some() {
-    //         let last_move = meta_board.last_move.unwrap();
-    //         let mut check = false;
-    //         for child in mcts.tree_head.children.iter() {
-    //             if child.move_ == Some(last_move) {
-    //                 mcts.tree_head = child.to_owned();
-    //                 check = true;
-    //                 break;
-    //             }
-    //         }
-
-    //         if !check {
-    //             // panic!("No child found for last move");
-    //             println!("{:?}", mcts.tree_head.children.iter().map(|x| x.move_));
-    //             println!("No child found for last move");
-    //         }
-    //     }
-
-    //     let possible_moves = &mut PossibleMoves::new();
-    //     let next_move = &mut MetaMove::new_empty();
-
-    //     for _ in 0..mcts.iterations {
-    //         mcts.tree_head.select_and_backtrack(meta_board, possible_moves, next_move);
-    //     }
-
-    //     if mcts.debug {
-
-    //         for child in mcts.tree_head.children.iter() {
-    //             println!(
-    //                 "{:?}: {} {}",
-    //                 child.move_.unwrap().absolute_index,
-    //                 child.score,
-    //                 child.visit_count
-    //             );
-    //         }
-
-    //         println!("Score: {}", mcts.tree_head.score);
-    //         println!("Visits: {}", mcts.tree_head.visit_count);
-    //         println!(
-    //             "Score: {}",
-    //             1. - (mcts.tree_head.score / mcts.tree_head.visit_count)
-    //         );
-    //         let mut pv = vec![];
-    //         mcts.tree_head.pv(&mut pv);
-    //         for move_ in pv {
-    //             println!("{:?}", move_.absolute_index);
-    //         }
-    //     }
-
-    //     let best_move = mcts.tree_head.get_best_child_score().unwrap();
-    //     mcts.tree_head = best_move.to_owned();
-
-    //     mcts.tree_head.move_.unwrap()
-    // }
-}
 
 
 // ##############################
