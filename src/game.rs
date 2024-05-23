@@ -3,7 +3,7 @@ use std::{error::Error, fmt, ops::{Index, RangeBounds}, vec};
 // #############################
 // Change these value to change the depth of the game
 // The depth of the game is the number of boards that are nested in each other
-   const META_DEPTH: usize = 1;
+   const META_DEPTH: usize = 2;
 // #############################
 
 

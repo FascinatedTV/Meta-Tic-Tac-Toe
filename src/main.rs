@@ -12,16 +12,16 @@ fn main() {
     let mut draws = 0;
 
     for _ in 0..10 {
-        // let player1 = Box::new(RandomPlayer::new());
-        let player1 = Box::new(HumanPlayer::new());
+        let player1 = Box::new(RandomPlayer::new());
+        // let player1 = Box::new(HumanPlayer::new());
         // let player1 = Box::new(MonteCarlo::new(100, false));
         let player2 = Box::new(MonteCarlo::new(5000, false));
         let mut game = Game::new(player1, player2);
-        match game.play(){
-            PlayerMarker::X => wins1 += 1,
-            PlayerMarker::O => wins2 += 1,
-            PlayerMarker::Empty => draws += 1,
-        }
+        let result = game.play();
+
+        wins1 += result.max(0);
+        wins2 -= result.min(0);
+        draws += (result == 0) as i32;
     }
 
     println!(
@@ -339,7 +339,7 @@ struct Game {
     player1: Box<dyn Player>,
     player2: Box<dyn Player>,
     board: GameState,
-    current_player: i32,
+    starting_player: i8,
 }
 
 impl Game {
@@ -348,11 +348,13 @@ impl Game {
             player1,
             player2,
             board: GameState::new(),
-            current_player: 1,
+            starting_player: if rand::random() { 1 } else { -1 },
         }
     }
 
-    fn play(&mut self) -> PlayerMarker {
+    fn play(&mut self) -> i8 {
+        let mut current_player_index = self.starting_player.clone();
+        println!("Player {} starts!", current_player_index.max(0) + 1);
 
         loop {
             println!("{}", self.board);
@@ -360,10 +362,10 @@ impl Game {
             // let possible_moves = self.board.get_possible_moves();
             if !self.board.board.can_set(){
                 println!("{}", "It's a draw!".yellow());
-                return PlayerMarker::Empty;
+                return 0;
             }
 
-            let current_player = if self.current_player == 1 {
+            let current_player = if current_player_index == 1 {
                 &mut self.player1
             } else {
                 &mut self.player2
@@ -377,14 +379,18 @@ impl Game {
                     println!("Player {} wins!", player_marker.to_char());
                     println!("{}", self.board);
                     println!("Game over!");
-                    return player_marker
+                    return match player_marker {
+                        PlayerMarker::X => self.starting_player,
+                        PlayerMarker::O => self.starting_player * -1,
+                        PlayerMarker::Empty => 0,
+                    };
                 }
             } else {
                 println!("Invalid move!");
                 continue;
             }
 
-            self.current_player *= -1;
+            current_player_index *= -1;
         }
     }
 }
