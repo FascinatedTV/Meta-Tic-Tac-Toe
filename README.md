@@ -50,8 +50,8 @@ You can switch the type of players by commenting or uncommenting the relevant li
 
 - HumanPlayer: Allows a human to input moves via the console.
 - RandomPlayer: Makes random moves.
-- MonteCarlo: Uses Monte Carlo Tree Search for making moves. You can specify the number of iterations for the MCTS algorithm.
-
+- MonteCarloSync: Uses Monte Carlo Tree Search for making moves. You can specify the number of iterations for the MCTS algorithm. The game will wait until the iterations are done.
+- MonteCarloAsync: Uses Monte Carlo Tree Search for making moves. You can specify the duration for each move of the MCTS algorithm. The player also thinks, when the opponent is thinking. (thinking duration less than 100ms is unstable)
 ### Changing the Depth
 The depth of the game (the number of nested boards) can be modified in the game.rs file. Adjust the META_DEPTH constant to your desired depth:
 
@@ -75,11 +75,6 @@ Player 1: 5 | Player 2 3 | Draws 2
 ## Code Structure
 - main.rs: Contains the main function, player definitions, and game loop.
 - game.rs: Contains game logic, board structures, and helper functions.
-
-## Additional Information
-- HumanPlayer: Prompts the user to enter a move by typing the index of the desired position.
-- RandomPlayer: Selects a move randomly from the available moves.
-- MonteCarlo: Implements Monte Carlo Tree Search for decision-making. The number of iterations and debug mode can be customized.
 
 ## Contact
 For further information or questions, please reach out to the repository owner.

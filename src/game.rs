@@ -28,6 +28,7 @@ const WINNING_POSITIONS: [u16; 8] = [
 pub enum PlayerMarker {
     X,
     O,
+    Draw,
     Empty,
 }
 
@@ -37,6 +38,7 @@ impl PlayerMarker {
             PlayerMarker::X => 'X',
             PlayerMarker::O => 'O',
             PlayerMarker::Empty => '_',
+            PlayerMarker::Draw => 'D',
         }
     }
 
@@ -45,6 +47,7 @@ impl PlayerMarker {
             PlayerMarker::X => PlayerMarker::O,
             PlayerMarker::O => PlayerMarker::X,
             PlayerMarker::Empty => PlayerMarker::Empty,
+            PlayerMarker::Draw => PlayerMarker::Draw,
         }
     }
 }
@@ -255,7 +258,7 @@ impl BitBoard {
         match player {
             PlayerMarker::X => self.x |= mask,
             PlayerMarker::O => self.o |= mask,
-            PlayerMarker::Empty => {}
+            _ => {}
         };
 
         Ok(self.get_winner())
@@ -287,6 +290,10 @@ impl BitBoard {
     }
 
     fn get_winner(&self) -> PlayerMarker {
+        if self.x | self.o == 0b111_111_111 {
+            return PlayerMarker::Draw;
+        }
+
         for &pos in WINNING_POSITIONS.iter() {
             if self.x & pos == pos {
                 return PlayerMarker::X;
@@ -298,7 +305,7 @@ impl BitBoard {
     }
 
     fn can_set(&self) -> bool {
-        (self.x | self.o) != 0b111_111_111 && self.get_winner() == PlayerMarker::Empty
+        self.get_winner() == PlayerMarker::Empty
     }
 }
 
@@ -378,7 +385,7 @@ impl MetaBoard {
 
         // if the index is empty, get all empty positions in the board
         // empty index means, that the board respective board is already full
-        if index.is_empty() || self.board.get(index[0]) != PlayerMarker::Empty {
+        if index.is_empty() || self.board.get(index[0]) != PlayerMarker::Empty || !self.sub_boards[index[0]].can_set(){
             for (i, sub_board) in self.sub_boards.iter().enumerate() {
                 if self.board.get(i) != PlayerMarker::Empty {
                     continue;
@@ -577,7 +584,7 @@ impl MetaBoard {
                 let sub_top = top + i * sub_size + i * depth;
                 let sub_left = left + j * sub_size + j * depth;
 
-                if self.board.get(index) != PlayerMarker::Empty {
+                if self.board.get(index) != PlayerMarker::Empty  {
                     let symbol = self.board.get(index).to_char();
 
                     array[sub_top][sub_left] = symbol;
