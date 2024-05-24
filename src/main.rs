@@ -4,6 +4,9 @@ use colored::Colorize;
 use game::{GameState, MetaMove, PlayerMarker, PossibleMoves, DISPLAY_SIZE};
 use rand::Rng;
 
+/// Main function
+/// 
+/// Plays n games between two players and tracks the wins and draws
 fn main() {
     println!("Display_Size: {}", DISPLAY_SIZE);
 
@@ -15,7 +18,7 @@ fn main() {
         let player1 = Box::new(RandomPlayer::new());
         // let player1 = Box::new(HumanPlayer::new());
         // let player1 = Box::new(MonteCarlo::new(100, false));
-        let player2 = Box::new(MonteCarlo::new(5000, false));
+        let player2 = Box::new(MonteCarlo::new(5000));
         let mut game = Game::new(player1, player2);
         let result = game.play();
 
@@ -111,11 +114,10 @@ struct GameTreeKnot {
 struct MonteCarlo {
     tree_head: GameTreeKnot,
     iterations: i32,
-    debug: bool,
 }
 
 impl MonteCarlo {
-    fn new(iterations: i32, debug: bool) -> Self {
+    fn new(iterations: i32) -> Self {
         MonteCarlo {
             tree_head: GameTreeKnot {
                 children: vec![],
@@ -124,30 +126,35 @@ impl MonteCarlo {
                 visit_count: 0.,
             },
             iterations,
-            debug,
         }
+    }
+
+    fn move_head(&mut self, meta_board: &GameState) -> bool {
+        if meta_board.last_move.is_some() && self.tree_head.move_.is_some() {
+            let last_move = meta_board.last_move.unwrap();
+            for child in self.tree_head.children.iter() {
+                if child.move_ == Some(last_move) {
+                    self.tree_head = child.to_owned();
+                    return true;
+                }
+            }  
+        }
+        false
     }
 }
 
 impl Player for MonteCarlo {
     fn get_move(&mut self, mut meta_board: GameState) -> MetaMove {
         let meta_board = &mut meta_board;
-        if meta_board.last_move.is_some() && self.tree_head.move_.is_some() {
-            let last_move = meta_board.last_move.unwrap();
-            let mut check = false;
-            for child in self.tree_head.children.iter() {
-                if child.move_ == Some(last_move) {
-                    self.tree_head = child.to_owned();
-                    check = true;
-                    break;
-                }
-            }
-
-            if !check {
-                // panic!("No child found for last move");
-                println!("{:?}", self.tree_head.children.iter().map(|x| x.move_));
-                println!("No child found for last move");
-            }
+        
+        if !self.move_head(&meta_board){
+            // Reset head if move is not found
+            self.tree_head = GameTreeKnot {
+                children: vec![],
+                move_: meta_board.last_move,
+                score: 0.,
+                visit_count: 0.,
+            };
         }
 
         let possible_moves = &mut PossibleMoves::new();
@@ -155,30 +162,6 @@ impl Player for MonteCarlo {
 
         for _ in 0..self.iterations {
             self.tree_head.select_and_backtrack(meta_board, possible_moves, next_move);
-        }
-
-        if self.debug {
-
-            for child in self.tree_head.children.iter() {
-                println!(
-                    "{:?}: {} {}",
-                    child.move_.unwrap().absolute_index,
-                    child.score,
-                    child.visit_count
-                );
-            }
-
-            println!("Score: {}", self.tree_head.score);
-            println!("Visits: {}", self.tree_head.visit_count);
-            println!(
-                "Score: {}",
-                1. - (self.tree_head.score / self.tree_head.visit_count)
-            );
-            let mut pv = vec![];
-            self.tree_head.pv(&mut pv);
-            for move_ in pv {
-                println!("{:?}", move_.absolute_index);
-            }
         }
 
         let best_move = self.tree_head.get_best_child_score().unwrap();
@@ -189,6 +172,7 @@ impl Player for MonteCarlo {
 }
 
 impl GameTreeKnot {
+    /// Upper Confidence Bound for Trees (UCT) algorithm
     fn uct(&self, child: &GameTreeKnot) -> f64 {
         if child.visit_count == 0. {
             return std::f64::MAX; // Return the maximum floating-point number possible
@@ -210,7 +194,9 @@ impl GameTreeKnot {
         }
     }
 
-
+    /// Returns the child with the best score
+    /// 
+    /// The score is calculated as the number of wins divided by the number of visits
     fn get_best_child_score(&mut self) -> Option<&mut GameTreeKnot> {
         if self.children.is_empty() {
             return None;
@@ -232,6 +218,7 @@ impl GameTreeKnot {
             })
     }
 
+    /// Recursively selects a child node and backtracks the score
     fn select_and_backtrack(
         &mut self, 
         meta_board: &mut GameState, 
@@ -269,6 +256,7 @@ impl GameTreeKnot {
         result
     }
 
+    /// Expands a leaf node and plays out a random game
     fn expand_and_playout(&mut self, mut meta_board: GameState, possible_moves: &mut PossibleMoves, next_move: &mut MetaMove) -> f32 {
         meta_board.get_possible_moves(possible_moves, next_move);
 
@@ -298,6 +286,7 @@ impl GameTreeKnot {
         1. - self.children[rand_index].playout(&mut meta_board, possible_moves, next_move)
     }
 
+    /// Plays out a random game until the end
     fn playout(&mut self, meta_board: &mut GameState, possible_moves: &mut PossibleMoves, next_move: &mut MetaMove) -> f32 {
         let mut rng = rand::thread_rng();
         let current_player = meta_board.current_player;
@@ -352,6 +341,9 @@ impl Game {
         }
     }
 
+    /// Plays the game until a player wins or it's a draw
+    /// 
+    /// Returns the -1 if player 1 wins, 1 if player 2 wins, and 0 if it's a draw
     fn play(&mut self) -> i8 {
         let mut current_player_index = self.starting_player.clone();
         println!("Player {} starts!", current_player_index.max(0) + 1);
@@ -379,10 +371,9 @@ impl Game {
                     println!("Player {} wins!", player_marker.to_char());
                     println!("{}", self.board);
                     println!("Game over!");
-                    return match player_marker {
-                        PlayerMarker::X => self.starting_player,
-                        PlayerMarker::O => self.starting_player * -1,
-                        PlayerMarker::Empty => 0,
+                    return match player_marker == PlayerMarker::X {
+                        true => self.starting_player,
+                        false => self.starting_player * -1,
                     };
                 }
             } else {

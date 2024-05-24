@@ -16,6 +16,7 @@ pub const BOARD_SIZE: usize = 3;
 pub const BOARD_SIZE_SQUARED: usize = BOARD_SIZE * BOARD_SIZE;
 pub const META_SIZE: usize = BOARD_SIZE_SQUARED.pow(META_DEPTH as u32);
 pub const DISPLAY_SIZE: usize = Board::calculate_display_size();
+// Winning positions for a single bit board
 const WINNING_POSITIONS: [u16; 8] = [
     0b111_000_000, 0b000_111_000, 0b000_000_111, // Zeilen
     0b100_100_100, 0b010_010_010, 0b001_001_001, // Spalten
@@ -67,9 +68,12 @@ impl Error for InvalidMoveError {}
 // #                           #
 // #############################
 
+/// MetaMove represents an array of indexes that are used to access the nested boards
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Default)]
 pub struct MetaMove {
+    /// indices of the nested boards
     pub absolute_index: [usize; META_DEPTH],
+    /// current index for creating the possible moves
     index: usize
 }
 
@@ -108,6 +112,10 @@ impl MetaMove {
         self.absolute_index[self.index]
     }
 
+    /// Rotate the index to the left.
+    /// Used for creating the base for the possible moves
+    /// 
+    /// \[0, 1, 2] -> \[1, 2, 0]
     pub fn shift_left(&self) -> MetaMove {
         let mut new_index = self.absolute_index;
         new_index.rotate_left(1);
@@ -120,6 +128,9 @@ impl MetaMove {
 // #                           #
 // #############################
 
+/// PossibleMoves is a collection of MetaMoves that are possible to play
+/// 
+/// Initialized with a fixed size of META_SIZE for performance reasons
 pub struct PossibleMoves {
     moves: [MetaMove; META_SIZE],
     index: usize,
@@ -206,6 +217,7 @@ impl Index<usize> for PossibleMoves {
 // #                           #
 // #############################
 
+/// BitBoard represents a single board with 9 fields
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct BitBoard {
     x: u16,
@@ -286,7 +298,7 @@ impl BitBoard {
     }
 
     fn can_set(&self) -> bool {
-        self.get_winner() == PlayerMarker::Empty && (self.x | self.o) != 0b111_111_111
+        (self.x | self.o) != 0b111_111_111 && self.get_winner() == PlayerMarker::Empty
     }
 }
 
@@ -312,6 +324,9 @@ impl MetaBoard {
         sub_board.get(&index[1..])
     }
 
+    /// Set the player marker at the given index
+    /// 
+    /// Returns the winner of the (current) board if the board is won
     fn set(&mut self, index: &[usize], player: PlayerMarker) -> Result<PlayerMarker, InvalidMoveError> {
         if index.len() <= 1 {
             return Err(InvalidMoveError {
@@ -320,14 +335,16 @@ impl MetaBoard {
         }
 
         let spec_index = index[0];
-
+        // Check if the board is already won 
         if self.board.get(spec_index) != PlayerMarker::Empty {
             return Err(InvalidMoveError {
                 message: "Board is already won".to_string(),
             });
         }
 
+        // Set the marker in the sub board
         let sub_board = self.sub_boards.get_mut(spec_index).unwrap();
+        // If the sub board is won, set the marker in the current board
         match sub_board.set(&index[1..], player) {
             Ok(marker) => {
                 if marker != PlayerMarker::Empty {
@@ -349,11 +366,18 @@ impl MetaBoard {
         self.board.unset(&[spec_index]);
     }
 
+    /// Get all empty positions in the board
+    /// 
+    /// uses a predefined array for storing the possible moves
+    /// 
+    /// index: the left shifted index of the last move
     fn get_empty_positions(&self, index: &[usize], possible_moves: &mut PossibleMoves, next_move: &mut MetaMove) {
         if self.get_winner() != PlayerMarker::Empty {
             return;
         }
 
+        // if the index is empty, get all empty positions in the board
+        // empty index means, that the board respective board is already full
         if index.is_empty() || self.board.get(index[0]) != PlayerMarker::Empty {
             for (i, sub_board) in self.sub_boards.iter().enumerate() {
                 if self.board.get(i) != PlayerMarker::Empty {
@@ -367,6 +391,7 @@ impl MetaBoard {
             return;
         }
 
+        // if the index is not empty, get all empty positions in the respective sub board
         let spec_index = index[0];
         let sub_board = self.sub_boards.get(spec_index).unwrap();
 
@@ -391,6 +416,9 @@ impl MetaBoard {
 // #                           #
 // #############################
 
+/// Board represents a board that can be either a BitBoard or a MetaBoard
+///
+/// The Board is used to create a nested board structure 
 #[derive(Clone, PartialEq)]
 pub enum Board {
     BitBoard(BitBoard),
@@ -568,6 +596,10 @@ impl MetaBoard {
 }
 
 impl fmt::Display for Board {
+
+    /// Display the board in a 2D representation
+    /// 
+    /// The function allocates a 2D array and fills it recursively with the board values
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut array = vec![vec![' '; DISPLAY_SIZE]; DISPLAY_SIZE];
         self.fill_board(&mut array, (0, 0), META_DEPTH, DISPLAY_SIZE);
