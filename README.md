@@ -24,7 +24,26 @@ cargo run
 ```
 
 ## How to Play
-The game runs 10 matches between two players, which can be either human, random, or Monte Carlo AI. The default setup is one human player against an AI using Monte Carlo with 5000 iterations.
+The game runs 10 matches between two players, which can be either human, random, or Monte Carlo AI. The default setup is one random player against an AI using Monte Carlo with 1000 iterations.
+
+Board:
+---------
+0 | 1 | 2
+---------
+3 | 4 | 5
+---------
+6 | 7 | 8
+---------
+
+### Each cell is accessible through an array-Index containing an index for each "layer".
+In a normal Tic-Tac-Toe game with META_DEPTH = 1 all possible indices are:
+
+> \[0] \[1] \[2] \[3] \[4] \[5] \[6] \[7] \[8]
+
+In a Meta-Tic-Tac-Toe game with META_DEPTH = 2 the indices look like this:
+
+> \[0,0] \[0,1] \[0,2] ... \[1,0] ...\[8,8]   
+
 
 ### Changing Players
 You can switch the type of players by commenting or uncommenting the relevant lines in the main.rs file. The available player types are:
@@ -63,6 +82,6 @@ Player 1: 5 | Player 2 3 | Draws 2
 - MonteCarlo: Implements Monte Carlo Tree Search for decision-making. The number of iterations and debug mode can be customized.
 
 ## Contact
-For further information or questions, please reach out to the repository owner or maintainer.
+For further information or questions, please reach out to the repository owner.
 
 Happy coding and enjoy playing Tic-Tac-Toe!
